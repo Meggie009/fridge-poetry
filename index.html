@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Fridge Poetry</title>
+<style>
+  :root{
+    --tile-cream: #f8f7f2;
+    --tile-border: rgba(15, 15, 12, 0.75);
+    --ink: #1c1b18;
+    --ink-soft: #55524a;
+    --shadow: rgba(15, 15, 12, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+  }
+
+  body {
+    background-color: #0b0b0b;
+    background-image:
+      radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0) 55%),
+      repeating-linear-gradient(
+        90deg,
+        rgba(255,255,255,0.015) 0px,
+        rgba(255,255,255,0.015) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+    position: relative;
+    touch-action: none;
+  }
+
+  .toolbar {
+    position: fixed;
+    top: 18px;
+    right: 22px;
+    display: flex;
+    gap: 10px;
+    z-index: 5;
+  }
+  .magnet-btn {
+    cursor: pointer;
+    border-radius: 8px;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--tile-cream);
+    background: #0b0b0b;
+    border: none;
+    box-shadow: none;
+    transition: transform 0.08s ease;
+  }
+  .magnet-btn svg { width: 22px; height: 22px; }
+  .magnet-btn:active { transform: scale(0.92); }
+  .magnet-btn:disabled { opacity: 0.5; cursor: default; }
+  .magnet-btn.lang-btn {
+    width: auto;
+    padding: 0 10px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+  }
+
+  /* the board area where words live */
+  #board {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .tile {
+    position: absolute;
+    padding: 6px 14px 8px;
+    background: var(--tile-cream);
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    font-size: 19px;
+    letter-spacing: 0.2px;
+    border-radius: 2px;
+    border: 1px solid var(--tile-border);
+    box-shadow: 2px 3px 5px var(--shadow);
+    cursor: grab;
+    user-select: none;
+    white-space: nowrap;
+    touch-action: none;
+    will-change: transform;
+  }
+  .tile.dragging {
+    cursor: grabbing;
+    box-shadow: 4px 7px 14px rgba(0,0,0,0.45);
+    z-index: 999 !important;
+  }
+  .tile.tile-suffix {
+    padding: 4px 9px 5px;
+    font-size: 15px;
+    font-style: italic;
+  }
+
+  footer {
+    position: fixed;
+    bottom: 8px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    z-index: 4;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button class="magnet-btn lang-btn" id="langBtn" title="Switch to German" aria-label="Switch to German">DE</button>
+  <button class="magnet-btn" id="shuffleBtn" title="Shuffle words" aria-label="Shuffle words">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 7h3.2c1.8 0 2.7 1 4 3"/>
+      <path d="M3 17h3.2c1.8 0 2.7-1 4-3"/>
+      <path d="M13.8 7H17.5"/>
+      <path d="M13.8 17H17.5"/>
+      <polyline points="15 4 18 7 15 10"/>
+      <polyline points="15 14 18 17 15 20"/>
+    </svg>
+  </button>
+  <button class="magnet-btn" id="clearBtn" title="Clear board" aria-label="Clear board">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="5"/>
+      <line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/>
+      <line x1="15.5" y1="8.5" x2="8.5" y2="15.5"/>
+    </svg>
+  </button>
+  <button class="magnet-btn" id="shareBtn" title="Share poem" aria-label="Share poem">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 5 7.5 7.5H4A2 2 0 0 0 2 9.5v9A2 2 0 0 0 4 20.5h16a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-3.5L15 5a1.5 1.5 0 0 0-1.3-.8h-3.4A1.5 1.5 0 0 0 9 5z"/>
+      <circle cx="12" cy="13" r="3.4"/>
+    </svg>
+  </button>
+</div>
+
+<div id="board"></div>
+
+<footer>drag words onto the board to write your poem</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+(function () {
+  const WORDS_EN = {
+    noun: ["moon","river","silence","garden","shadow","ocean","dust","fire","bone","glass",
+           "morning","stranger","rain","stone","paper","smoke","window","heart","field","echo",
+           "winter","light","ash","road","home","ghost","salt","sky","wound","door",
+           "dress","goddess","sea","skin","sun","picture","symphony","lake","beauty","life",
+           "love","crush","time","flower","comfort","vibration","night","moment","lips","steam"],
+    verb: ["whisper","forget","become","fall","burn","wander","breathe","drift","break","hold",
+           "remember","bloom","fade","dream","wait","fly","dissolve","gather","tremble","sing",
+           "scream","said","want","cry","say","sleep","felt","live","go","drink"],
+    adj:  ["quiet","broken","golden","distant","tender","empty","strange","wild","soft","cold",
+           "fragile","endless","hollow","bright","bitter","gentle","restless","forgotten",
+           "purple","blue","fast","smooth","mad","drunk","infinite","dark","living"],
+    // weight = how many "physical copies" this tile effectively has, so the
+    // words you actually need to glue a sentence together (the, a, and, of...)
+    // turn up more often than rare connectors — same reason a real DIY kit
+    // prints several copies of "the" but only one of "beneath".
+    connector: [
+      { word: "the", weight: 4 }, { word: "a", weight: 3 }, { word: "and", weight: 3 },
+      { word: "of", weight: 2 }, { word: "is", weight: 2 }, { word: "in", weight: 2 },
+      { word: "it", weight: 2 }, { word: "to", weight: 2 },
+      { word: "you", weight: 2 }, { word: "I", weight: 2 }, { word: "my", weight: 2 },
+      { word: "like", weight: 1 }, { word: "without", weight: 1 }, { word: "before", weight: 1 },
+      { word: "again", weight: 1 }, { word: "because", weight: 1 }, { word: "still", weight: 1 },
+      { word: "beneath", weight: 1 }, { word: "until", weight: 1 }, { word: "not", weight: 1 },
+      { word: "almost", weight: 1 }, { word: "never", weight: 1 }, { word: "always", weight: 1 },
+      { word: "her", weight: 1 }, { word: "his", weight: 1 }, { word: "our", weight: 1 },
+      { word: "who", weight: 1 }, { word: "as", weight: 1 }, { word: "out", weight: 1 },
+      { word: "each", weight: 1 }, { word: "can", weight: 1 }, { word: "&", weight: 2 },
+      { word: "away", weight: 1 }
+    ],
+    // short multi-word tiles, the way real magnetic poetry kits mix in phrases
+    phrase: ["speaks in rhyme","puts together","for the world","for the universe",
+             "it is","a journey","we all","must take","right on time","a gift for",
+             "once upon","far away","used to be","there is","long ago","and then"],
+    // tiny suffix tile that reads naturally stuck right after another word,
+    // the way physical kits include a small "-s" piece instead of a full tile
+    suffix: ["-s", "-y"]
+  };
+
+  // German set. No case/gender agreement is attempted anywhere here — every
+  // tile is a frozen dictionary form, the same way the English tiles never
+  // conjugate. Nouns follow German capitalization since that's a fixed
+  // spelling rule, not an inflection you'd need to fix up by hand. The
+  // fragmentation this causes (a "die" in front of a masculine noun, an
+  // infinitive standing in for any tense) is left as-is on purpose — it
+  // reads as surreal rather than broken, the same spirit as the English set.
+  const WORDS_DE = {
+    noun: ["Mond","Fluss","Stille","Garten","Schatten","Ozean","Staub","Feuer","Knochen","Glas",
+           "Morgen","Fremde","Regen","Stein","Papier","Rauch","Fenster","Herz","Feld","Echo",
+           "Winter","Licht","Asche","Straße","Heimat","Geist","Salz","Himmel","Wunde","Tür",
+           "Kleid","Göttin","Meer","Haut","Sonne","Bild","Symphonie","See","Schönheit","Leben",
+           "Liebe","Schwarm","Zeit","Blume","Trost","Vibration","Nacht","Moment","Lippen","Dampf"],
+    verb: ["flüstern","vergessen","werden","fallen","brennen","wandern","atmen","treiben","brechen","halten",
+           "erinnern","blühen","verblassen","träumen","warten","fliegen","auflösen","sammeln","zittern","singen",
+           "schreien","sagen","wollen","weinen","schlafen","fühlen","leben","gehen","trinken"],
+    adj:  ["still","zerbrochen","golden","fern","zart","leer","fremd","wild","weich","kalt",
+           "zerbrechlich","endlos","hohl","hell","bitter","sanft","rastlos",
+           "lila","blau","schnell","glatt","verrückt","betrunken","unendlich","dunkel","lebendig"],
+    connector: [
+      { word: "die", weight: 4 }, { word: "ein", weight: 3 }, { word: "und", weight: 3 },
+      { word: "von", weight: 2 }, { word: "ist", weight: 2 }, { word: "in", weight: 2 },
+      { word: "es", weight: 2 }, { word: "zu", weight: 2 },
+      { word: "du", weight: 2 }, { word: "ich", weight: 2 }, { word: "mein", weight: 2 },
+      { word: "wie", weight: 1 }, { word: "ohne", weight: 1 }, { word: "bevor", weight: 1 },
+      { word: "wieder", weight: 1 }, { word: "weil", weight: 1 }, { word: "noch", weight: 1 },
+      { word: "unter", weight: 1 }, { word: "bis", weight: 1 }, { word: "nicht", weight: 1 },
+      { word: "fast", weight: 1 }, { word: "nie", weight: 1 }, { word: "immer", weight: 1 },
+      { word: "ihr", weight: 1 }, { word: "sein", weight: 1 }, { word: "unser", weight: 1 },
+      { word: "wer", weight: 1 }, { word: "als", weight: 1 }, { word: "raus", weight: 1 },
+      { word: "jede", weight: 1 }, { word: "kann", weight: 1 }, { word: "&", weight: 2 },
+      { word: "weg", weight: 1 }
+    ],
+    phrase: ["spricht in Reimen","fügt zusammen","für die Welt","für das Universum",
+             "es ist","eine Reise","wir alle","müssen nehmen","genau pünktlich","ein Geschenk für",
+             "es war einmal","weit weg","war einmal","es gibt","vor langer Zeit","und dann"],
+    suffix: ["-e", "-en"]
+  };
+
+  let currentLang = "en";
+  function getWords() { return currentLang === "de" ? WORDS_DE : WORDS_EN; }
+
+  const board = document.getElementById("board");
+  const boardRect = () => board.getBoundingClientRect();
+
+  // Tiles are considered "in the tray" if their top position is below this
+  // fraction of the board height — that's the line that separates the fresh
+  // word tray from the poem area above it.
+  const TRAY_FRACTION = 0.62;
+
+  function isInTray(el) {
+    const rect = boardRect();
+    const top = parseFloat(el.style.top) || 0;
+    return top >= rect.height * TRAY_FRACTION - 40;
+  }
+
+  let zTop = 10;
+  let activeTiles = [];
+
+  function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  // Guarantees a minimum number of words from each category, so a shuffle
+  // can't accidentally leave out verbs (or any other part of speech).
+  // Words with a weight > 1 (see the connector list) are expanded into that
+  // many copies first, so common structural words are more likely to be
+  // drawn — and can occasionally appear twice in the same round.
+  function pickWords(count) {
+    const minPerCategory = 5;
+    const chosen = [];
+    const leftovers = [];
+
+    Object.keys(getWords()).forEach(cat => {
+      const expanded = [];
+      getWords()[cat].forEach(item => {
+        const word = typeof item === "string" ? item : item.word;
+        const weight = typeof item === "string" ? 1 : (item.weight || 1);
+        for (let i = 0; i < weight; i++) expanded.push(word);
+      });
+
+      const shuffled = shuffleArray(expanded);
+      const guaranteed = shuffled.slice(0, minPerCategory);
+      const rest = shuffled.slice(minPerCategory);
+      guaranteed.forEach(w => chosen.push({ word: w, cat }));
+      rest.forEach(w => leftovers.push({ word: w, cat }));
+    });
+
+    shuffleArray(leftovers);
+    while (chosen.length < count && leftovers.length) {
+      chosen.push(leftovers.pop());
+    }
+
+    return shuffleArray(chosen).slice(0, count);
+  }
+
+  function layoutTray(tiles) {
+    // scatter tiles near the bottom third, like a fresh box of magnets
+    const rect = boardRect();
+    const margin = 24;
+    const usableWidth = rect.width - margin * 2;
+    const cols = Math.max(6, Math.floor(usableWidth / 110));
+    const trayTop = rect.height * TRAY_FRACTION;
+    tiles.forEach((tile, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const jitterX = (Math.random() - 0.5) * 20;
+      const jitterY = (Math.random() - 0.5) * 14;
+      const x = margin + col * (usableWidth / cols) + jitterX;
+      const y = trayTop + row * 50 + jitterY;
+      tile.style.left = Math.max(4, x) + "px";
+      tile.style.top = Math.max(80, y) + "px";
+      tile.style.transform = `rotate(${(Math.random() * 6 - 3).toFixed(1)}deg)`;
+    });
+  }
+
+  function makeTile(entry) {
+    const el = document.createElement("div");
+    el.className = "tile" + (entry.cat === "suffix" ? " tile-suffix" : "");
+    el.textContent = entry.word;
+    el.style.zIndex = zTop++;
+    board.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function makeDraggable(el) {
+    let dragging = false;
+    let offsetX = 0, offsetY = 0;
+
+    function pointerDown(e) {
+      dragging = true;
+      el.classList.add("dragging");
+      el.style.zIndex = ++zTop;
+      const rect = el.getBoundingClientRect();
+      const point = e.touches ? e.touches[0] : e;
+      offsetX = point.clientX - rect.left;
+      offsetY = point.clientY - rect.top;
+      el.style.transform = "none";
+      document.addEventListener("mousemove", pointerMove);
+      document.addEventListener("mouseup", pointerUp);
+      document.addEventListener("touchmove", pointerMove, { passive: false });
+      document.addEventListener("touchend", pointerUp);
+      e.preventDefault();
+    }
+
+    function pointerMove(e) {
+      if (!dragging) return;
+      const point = e.touches ? e.touches[0] : e;
+      const bRect = boardRect();
+      let x = point.clientX - bRect.left - offsetX;
+      let y = point.clientY - bRect.top - offsetY;
+      x = Math.max(0, Math.min(x, bRect.width - el.offsetWidth));
+      y = Math.max(0, Math.min(y, bRect.height - el.offsetHeight));
+      el.style.left = x + "px";
+      el.style.top = y + "px";
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function pointerUp() {
+      dragging = false;
+      el.classList.remove("dragging");
+      document.removeEventListener("mousemove", pointerMove);
+      document.removeEventListener("mouseup", pointerUp);
+      document.removeEventListener("touchmove", pointerMove);
+      document.removeEventListener("touchend", pointerUp);
+    }
+
+    el.addEventListener("mousedown", pointerDown);
+    el.addEventListener("touchstart", pointerDown, { passive: false });
+  }
+
+  function newRound(count) {
+    board.querySelectorAll(".tile").forEach(t => t.remove());
+    activeTiles = pickWords(count).map(makeTile);
+    layoutTray(activeTiles);
+  }
+
+  // Replace only the words currently sitting in the tray zone. Anything the
+  // user has dragged up into the board area — their poem — is left alone,
+  // even if it was dragged before and dragged back down again.
+  function shuffleTray(count) {
+    const inTray = activeTiles.filter(isInTray);
+    const onBoard = activeTiles.filter(t => !isInTray(t));
+
+    inTray.forEach(t => t.remove());
+
+    const fresh = pickWords(count).map(makeTile);
+    layoutTray(fresh);
+
+    activeTiles = onBoard.concat(fresh);
+  }
+
+  document.getElementById("shuffleBtn").addEventListener("click", () => shuffleTray(28));
+  document.getElementById("clearBtn").addEventListener("click", () => newRound(28));
+
+  const langBtn = document.getElementById("langBtn");
+  langBtn.addEventListener("click", () => {
+    currentLang = currentLang === "en" ? "de" : "en";
+    langBtn.textContent = currentLang === "en" ? "DE" : "EN";
+    const nextLabel = currentLang === "en" ? "Switch to German" : "Switch to English";
+    langBtn.title = nextLabel;
+    langBtn.setAttribute("aria-label", nextLabel);
+    newRound(28);
+  });
+  document.getElementById("shareBtn").addEventListener("click", sharePoem);
+
+  async function sharePoem() {
+    const shareBtn = document.getElementById("shareBtn");
+    shareBtn.disabled = true;
+
+    try {
+      const canvas = await html2canvas(document.body, {
+        backgroundColor: "#0b0b0b",
+        useCORS: true,
+        // don't include the toolbar itself in the screenshot
+        ignoreElements: (el) => el.classList && el.classList.contains("toolbar")
+      });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          shareBtn.disabled = false;
+          return;
+        }
+        const file = new File([blob], "fridge-poem.png", { type: "image/png" });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ files: [file], title: "My fridge poem" });
+          } catch (err) {
+            // user cancelled the share sheet, nothing to do
+          }
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "fridge-poem.png";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }
+
+        shareBtn.disabled = false;
+      }, "image/png");
+    } catch (err) {
+      console.error("Could not capture the board", err);
+      shareBtn.disabled = false;
+    }
+  }
+
+  window.addEventListener("resize", () => {
+    const inTray = activeTiles.filter(isInTray);
+    layoutTray(inTray);
+  });
+
+  newRound(28);
+})();
+</script>
+
+</body>
+</html>
